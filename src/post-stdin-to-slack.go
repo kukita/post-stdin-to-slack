@@ -36,7 +36,6 @@ import (
 	"github.com/hashicorp/logutils"
 )
 
-// Config is struct
 type Config struct {
 	SlackIncomingWebhooksURL string `json:"slack_incoming_webhooks_url"`
 	SlackBotName             string `json:"slack_bot_name"`
@@ -46,162 +45,173 @@ type Config struct {
 	LogLevel                 string `json:"log_level"`
 }
 
-// SlackPost is struct
 type SlackPost struct {
-	SlackBotName         string                `json:"username"`
-	SlackBotIcon         string                `json:"icon_emoji"`
-	SlackChannel         string                `json:"channel"`
-	SlackMarkdownEnabled bool                  `json:"mrkdwn"`
-	SlackPostAttachments []SlackPostAttachment `json:"attachments"`
+	Username    string                `json:"username"`
+	IconEmoji   string                `json:"icon_emoji"`
+	Channel     string                `json:"channel"`
+	Mrkdwn      bool                  `json:"mrkdwn"`
+	Attachments []SlackPostAttachment `json:"attachments"`
 }
 
-// SlackPostAttachment is struct
 type SlackPostAttachment struct {
-	SlackPostAttachmentColor            string                     `json:"color"`
-	SlackPostAttachmentEnabledMarkdowns []string                   `json:"mrkdwn_in"`
-	SlackPostAttachmentFields           []SlackPostAttachmentField `json:"fields"`
+	Color    string                     `json:"color"`
+	MrkdwnIn []string                   `json:"mrkdwn_in"`
+	Fields   []SlackPostAttachmentField `json:"fields"`
 }
 
-// SlackPostAttachmentField is struct
 type SlackPostAttachmentField struct {
-	SlackPostTitle string `json:"title"`
-	SlackPostValue string `json:"value"`
+	Title string `json:"title"`
+	Value string `json:"value"`
 }
+
+const (
+	colorInfo    = "#1971FF"
+	colorSuccess = "#00B06B"
+	colorWarning = "#F6AA00"
+	colorError   = "#FF4B00"
+)
 
 func main() {
-	// Getting basename.
-	basename := filepath.Base(os.Args[0][:len(os.Args[0])-len(filepath.Ext(os.Args[0]))])
+	config := loadConfig()
+	setupLogging(config)
 
-	// Checking if there is a configuration file (JSON file) and create a new one if it does not exist.
-	configFilePath := os.Args[0][:len(os.Args[0])-len(filepath.Ext(os.Args[0]))] + ".json"
-	if _, err := os.Stat(configFilePath); os.IsNotExist(err) {
-		config := Config{
-			"YOUR_SLACK_INCOMING_WEBHOOKS_URL",
-			"ChatOps Bot",
-			":loudspeaker:",
-			"#general",
-			false,
-			"INFO",
-		}
+	message, postType := parseFlags()
+	inputText := readStdin()
 
-		configJSON, err := json.Marshal(&config)
-		if err != nil {
-			log.Fatal(err)
-		}
+	slackPost := createSlackPost(config, message, postType, inputText)
+	postToSlack(config.SlackIncomingWebhooksURL, slackPost)
 
-		configFile, err := os.Create(configFilePath)
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer configFile.Close()
+	log.Print("[INFO] post completed successfully")
+}
 
-		configFile.WriteString(string(configJSON))
-		log.Print("[INFO] ------------------------------------------------------------")
-		log.Print("[INFO] Creating '" + configFilePath + "' has finished successfully. At First, please edit this file.")
-		log.Print("[INFO] ------------------------------------------------------------")
-		return
-	}
+func loadConfig() Config {
+	configPath := getConfigPath()
+	createConfigIfNotExists(configPath)
 
-	// Loading the configuration file (JSON file).
-	configFile, err := ioutil.ReadFile(configFilePath)
+	configFile, err := ioutil.ReadFile(configPath)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("failed to read config file: %v", err)
 	}
+
 	var config Config
-	json.Unmarshal(configFile, &config)
+	if err := json.Unmarshal(configFile, &config); err != nil {
+		log.Fatalf("failed to parse config file: %v", err)
+	}
+	return config
+}
 
-	// Setting "hashicorp/logutils".
+func getConfigPath() string {
+	executable, _ := os.Executable()
+	return executable[:len(executable)-len(filepath.Ext(executable))] + ".json"
+}
+
+func createConfigIfNotExists(path string) {
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		config := Config{
+			SlackIncomingWebhooksURL: "YOUR_SLACK_INCOMING_WEBHOOKS_URL",
+			SlackBotName:             "ChatOps Bot",
+			SlackBotIcon:             ":loudspeaker:",
+			SlackChannel:             "#general",
+			LogEnabled:               false,
+			LogLevel:                 "INFO",
+		}
+
+		configJSON, _ := json.Marshal(&config)
+		if err := ioutil.WriteFile(path, configJSON, 0644); err != nil {
+			log.Fatalf("failed to create config file: %v", err)
+		}
+		log.Printf("[INFO] created new config file: %s", path)
+	}
+}
+
+func setupLogging(config Config) {
+	var writer io.Writer
 	if config.LogEnabled {
-		logFilePath := os.Args[0][:len(os.Args[0])-len(filepath.Ext(os.Args[0]))] + ".log"
-		logfile, err := os.OpenFile(logFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+		logPath := getLogPath()
+		logFile, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 		if err != nil {
-			log.Fatal(err)
+			log.Fatalf("failed to open log file: %v", err)
 		}
-		defer logfile.Close()
-
-		filter := &logutils.LevelFilter{
-			Levels:   []logutils.LogLevel{"TRACE", "DEBUG", "INFO", "WARN", "ERROR", "FATAL"},
-			MinLevel: logutils.LogLevel(config.LogLevel),
-			Writer:   io.MultiWriter(logfile, os.Stdout),
-		}
-		log.SetOutput(filter)
+		writer = io.MultiWriter(logFile, os.Stdout)
 	} else {
-		filter := &logutils.LevelFilter{
-			Levels:   []logutils.LogLevel{"TRACE", "DEBUG", "INFO", "WARN", "ERROR", "FATAL"},
-			MinLevel: logutils.LogLevel(config.LogLevel),
-			Writer:   os.Stdout,
-		}
-		log.SetOutput(filter)
+		writer = os.Stdout
 	}
 
-	log.Print("[INFO] ------------------------------------------------------------")
-	log.Print("[INFO] '" + basename + "' is starting.")
-	log.Print("[INFO] ------------------------------------------------------------")
-	postMessage := flag.String("message", "", "Post Message.")
-	postType := flag.String("type", "Info", "Post Type. { Info | Success | Warning | Error }")
+	filter := &logutils.LevelFilter{
+		Levels:   []logutils.LogLevel{"TRACE", "DEBUG", "INFO", "WARN", "ERROR", "FATAL"},
+		MinLevel: logutils.LogLevel(config.LogLevel),
+		Writer:   writer,
+	}
+	log.SetOutput(filter)
+}
+
+func getLogPath() string {
+	executable, _ := os.Executable()
+	return executable[:len(executable)-len(filepath.Ext(executable))] + ".log"
+}
+
+func parseFlags() (string, string) {
+	message := flag.String("message", "", "Post Message")
+	postType := flag.String("type", "Info", "Post Type { Info | Success | Warning | Error }")
 	flag.Parse()
-	log.Print("[DEBUG] Setting post message: " + *postMessage)
-	log.Print("[DEBUG] Setting post type: " + *postType)
+	return *message, *postType
+}
 
-	postColorMap := map[string]string{
-		"Info":    "#1971FF",
-		"Success": "#00B06B",
-		"Warning": "#F6AA00",
-		"Error":   "#FF4B00",
+func readStdin() string {
+	scanner := bufio.NewScanner(os.Stdin)
+	var input string
+	for scanner.Scan() {
+		input += scanner.Text() + "\n"
 	}
-	log.Print("[DEBUG] Setting post color: " + postColorMap[*postType])
+	return input
+}
 
-	log.Print("[INFO] The following has been entered as standard input.")
-	buffers := make([]byte, 0, 1024)
-	stdInScanner := bufio.NewScanner(os.Stdin)
-	for stdInScanner.Scan() {
-		buffers = append(buffers, stdInScanner.Text()...)
-		buffers = append(buffers, "\n"...)
-	}
-	log.Print("[INFO] " + string(buffers))
-
-	slackPostAttachmentField := SlackPostAttachmentField{
-		"[" + *postType + "] " + *postMessage,
-		"```" + string(buffers) + "```",
-	}
-
-	slackPostAttachment := SlackPostAttachment{
-		postColorMap[*postType],
-		[]string{"fields"},
-		[]SlackPostAttachmentField{slackPostAttachmentField},
+func createSlackPost(config Config, message, postType, input string) SlackPost {
+	var color string
+	switch postType {
+	case "Info":
+		color = colorInfo
+	case "Success":
+		color = colorSuccess
+	case "Warning":
+		color = colorWarning
+	case "Error":
+		color = colorError
+	default:
+		color = colorInfo
 	}
 
-	slackPost := SlackPost{
-		config.SlackBotName,
-		config.SlackBotIcon,
-		config.SlackChannel,
-		true,
-		[]SlackPostAttachment{slackPostAttachment},
+	attachment := SlackPostAttachment{
+		Color:    color,
+		MrkdwnIn: []string{"fields"},
+		Fields: []SlackPostAttachmentField{
+			{
+				Title: "[" + postType + "] " + message,
+				Value: "```" + input + "```",
+			},
+		},
 	}
 
-	log.Print("[DEBUG] Generating JSON string is starting.")
-	slackPostJSON, err := json.Marshal(slackPost)
+	return SlackPost{
+		Username:    config.SlackBotName,
+		IconEmoji:   config.SlackBotIcon,
+		Channel:     config.SlackChannel,
+		Mrkdwn:      true,
+		Attachments: []SlackPostAttachment{attachment},
+	}
+}
+
+func postToSlack(webhookURL string, post SlackPost) {
+	postJSON, err := json.Marshal(post)
 	if err != nil {
-		log.Print("[ERROR] Generating JSON string is failed.")
-		log.Fatal(err)
+		log.Fatalf("failed to marshal slack post: %v", err)
 	}
-	log.Print("[DEBUG] Generating JSON string has finished.")
-	log.Print("[DEBUG] " + string(slackPostJSON))
 
-	log.Print("[INFO] Post form data to the following URL.")
-	log.Print("[INFO] " + string(config.SlackIncomingWebhooksURL))
-	httpPostFormResponce, err := http.PostForm(
-		config.SlackIncomingWebhooksURL,
-		url.Values{"payload": {string(slackPostJSON)}},
-	)
+	resp, err := http.PostForm(webhookURL, url.Values{"payload": {string(postJSON)}})
 	if err != nil {
-		log.Print("[ERROR] Posting form data is failed.")
-		log.Fatal(err)
+		log.Fatalf("failed to post to slack: %v", err)
 	}
+	defer resp.Body.Close()
 
-	log.Print("[INFO] HTTP Responce Status: " + httpPostFormResponce.Status)
-	log.Print("[INFO] ------------------------------------------------------------")
-	log.Print("[INFO] '" + basename + "' has finished successfully.")
-	log.Print("[INFO] ------------------------------------------------------------")
-	return
+	log.Printf("[INFO] slack api response: %s", resp.Status)
 }
