@@ -1,7 +1,7 @@
-# Slack Poster
+# Post Stdin to Slack
 
-Slack Posterは、標準入力から受け取ったテキストをSlackチャンネルに投稿するGo言語で書かれたコマンドラインツールです<br>
-(Slack Poster is a command-line tool written in Go that posts text received from standard input to a Slack channel.)
+Post Stdin to Slackは、標準入力から受け取ったテキストをSlackチャンネルに投稿するGo言語で書かれたコマンドラインツールです<br>
+(Post Stdin to Slack is a command-line tool written in Go that posts text received from standard input to a Slack channel.)
 
 ## 機能 (Features)
 
@@ -17,13 +17,13 @@ Slack Posterは、標準入力から受け取ったテキストをSlackチャン
 ## インストール (Installation)
 
 ```bash
-go get github.com/yourusername/slack-poster
+go get github.com/yourusername/post-stdin-to-slack
 ```
 
 ## 設定 (Configuration)
 
-初回実行時に、実行ファイルと同じディレクトリに`slack-poster.json`という設定ファイルを作成します<br>
-(I create a configuration file named `slack-poster.json` in the same directory as the executable file on first run.)
+初回実行時に、実行ファイルと同じディレクトリに`post-stdin-to-slack.json`という設定ファイルを作成します<br>
+(I create a configuration file named `post-stdin-to-slack.json` in the same directory as the executable file on first run.)
 
 このファイルを編集して、SlackのWebhook URLやその他の設定を行ってください<br>
 (Please edit this file to configure the Slack Webhook URL and other settings.)
@@ -42,7 +42,7 @@ go get github.com/yourusername/slack-poster
 ## 使用方法 (Usage)
 
 ```bash
-echo "Hello, Slack!" | slack-poster -message "Greeting" -type Info
+echo "Hello, Slack!" | post-stdin-to-slack -message "Greeting" -type Info
 ```
 
 ### オプション (Options)
@@ -57,8 +57,8 @@ echo "Hello, Slack!" | slack-poster -message "Greeting" -type Info
 ログを有効にするには、設定ファイルの`log_enabled`を`true`に設定してください<br>
 (To enable logging, set `log_enabled` to `true` in the configuration file.)
 
-ログファイルは実行ファイルと同じディレクトリに`slack-poster.log`という名前で作成します<br>
-(I create a log file named `slack-poster.log` in the same directory as the executable file.)
+ログファイルは実行ファイルと同じディレクトリに`post-stdin-to-slack.log`という名前で作成します<br>
+(I create a log file named `post-stdin-to-slack.log` in the same directory as the executable file.)
 
 ## ライセンス (License)
 
@@ -78,4 +78,4 @@ Pull Requestも歓迎します<br>
 
 ## 作者 (Author)
 
-Keisuke Kukita
+[Keisuke Kukita](https://github.com/kukita)
